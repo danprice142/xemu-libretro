@@ -413,6 +413,9 @@ foreach dir : target_dirs
   endif
 
   target_base = dir.split('-')[0]
+  if 'qemu-system-' + target_base not in emulators
+    continue
+  endif
   qtest_emulator = emulators['qemu-system-' + target_base]
   target_qtests = get_variable('qtests_' + target_base, []) + qtests_generic
   has_kvm = ('CONFIG_KVM' in config_all_accel and host_os == 'linux'

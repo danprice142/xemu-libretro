@@ -121,7 +121,11 @@ CPUState *qemu_get_cpu(int index)
 }
 
 /* current CPU in the current thread. It is only valid inside cpu_exec() */
+#if defined(LIBRETRO) && defined(_WIN32)
+unsigned long tls_key_current_cpu = 0xFFFFFFFF; /* TLS_OUT_OF_INDEXES */
+#else
 __thread CPUState *current_cpu;
+#endif
 
 struct qemu_work_item {
     QSIMPLEQ_ENTRY(qemu_work_item) node;
@@ -162,7 +166,7 @@ void do_run_on_cpu(CPUState *cpu, run_on_cpu_func func, run_on_cpu_data data,
         CPUState *self_cpu = current_cpu;
 
         qemu_cond_wait(&qemu_work_cond, mutex);
-        current_cpu = self_cpu;
+        SET_current_cpu(self_cpu);
     }
 }
 

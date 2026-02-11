@@ -17,7 +17,18 @@
 #include "exec/replay-core.h"
 
 
+#if defined(LIBRETRO) && defined(_WIN32)
+static DWORD tls_key_thread_rand = TLS_OUT_OF_INDEXES;
+static inline void thread_rand_tls_init(void) {
+    if (tls_key_thread_rand == TLS_OUT_OF_INDEXES)
+        tls_key_thread_rand = TlsAlloc();
+}
+#define thread_rand ((GRand *)(thread_rand_tls_init(), TlsGetValue(tls_key_thread_rand)))
+#define SET_thread_rand(v) TlsSetValue(tls_key_thread_rand, (LPVOID)(v))
+#else
 static __thread GRand *thread_rand;
+#define SET_thread_rand(v) do { thread_rand = (v); } while(0)
+#endif
 static bool deterministic;
 
 
@@ -29,7 +40,8 @@ static int glib_random_bytes(void *buf, size_t len)
 
     if (unlikely(rand == NULL)) {
         /* Thread not initialized for a cpu, or main w/o -seed.  */
-        thread_rand = rand = g_rand_new();
+        rand = g_rand_new();
+        SET_thread_rand(rand);
     }
 
     for (i = 0; i + 4 <= len; i += 4) {
@@ -81,9 +93,9 @@ void qemu_guest_random_seed_thread_part2(uint64_t seed)
 {
     g_assert(thread_rand == NULL);
     if (deterministic) {
-        thread_rand =
+        SET_thread_rand(
             g_rand_new_with_seed_array((const guint32 *)&seed,
-                                       sizeof(seed) / sizeof(guint32));
+                                       sizeof(seed) / sizeof(guint32)));
     }
 }
 

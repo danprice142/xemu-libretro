@@ -407,15 +407,26 @@ int pgraph_gl_get_framebuffer_surface(NV2AState *d)
 {
     PGRAPHState *pg = &d->pgraph;
     PGRAPHGLState *r = pg->gl_renderer_state;
+    static int gfbs_call = 0;
+    gfbs_call++;
 
     qemu_mutex_lock(&d->pfifo.lock);
-    // FIXME: Possible race condition with pgraph, consider lock
 
     VGADisplayParams vga_display_params;
     d->vga.get_params(&d->vga, &vga_display_params);
 
-    SurfaceBinding *surface = pgraph_gl_surface_get_within(
-        d, d->pcrtc.start + vga_display_params.line_offset);
+    hwaddr target_addr = d->pcrtc.start + vga_display_params.line_offset;
+
+    /* Count surfaces for debug */
+    int num_surfaces = 0;
+    SurfaceBinding *s_iter;
+    QTAILQ_FOREACH(s_iter, &r->surfaces, entry) { num_surfaces++; }
+
+    if (0) {
+        (void)num_surfaces;
+    }
+
+    SurfaceBinding *surface = pgraph_gl_surface_get_within(d, target_addr);
     if (surface == NULL || !surface->color) {
         qemu_mutex_unlock(&d->pfifo.lock);
         return 0;

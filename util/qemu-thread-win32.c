@@ -247,7 +247,24 @@ struct QemuThreadData {
 static bool atexit_registered;
 static NotifierList main_thread_exit;
 
+#if defined(LIBRETRO)
+static DWORD tls_key_qemu_thread_data = TLS_OUT_OF_INDEXES;
+static inline QemuThreadData *get_qemu_thread_data(void) {
+    if (tls_key_qemu_thread_data == TLS_OUT_OF_INDEXES)
+        tls_key_qemu_thread_data = TlsAlloc();
+    return (QemuThreadData *)TlsGetValue(tls_key_qemu_thread_data);
+}
+static inline void set_qemu_thread_data(QemuThreadData *v) {
+    if (tls_key_qemu_thread_data == TLS_OUT_OF_INDEXES)
+        tls_key_qemu_thread_data = TlsAlloc();
+    TlsSetValue(tls_key_qemu_thread_data, (LPVOID)v);
+}
+#define qemu_thread_data (get_qemu_thread_data())
+#define SET_qemu_thread_data(v) set_qemu_thread_data(v)
+#else
 static __thread QemuThreadData *qemu_thread_data;
+#define SET_qemu_thread_data(v) do { qemu_thread_data = (v); } while(0)
+#endif
 
 static void run_main_thread_exit(void)
 {
@@ -278,7 +295,7 @@ static unsigned __stdcall win32_start_routine(void *arg)
     void *(*start_routine)(void *) = data->start_routine;
     void *thread_arg = data->arg;
 
-    qemu_thread_data = data;
+    SET_qemu_thread_data(data);
     qemu_thread_exit(start_routine(thread_arg));
     abort();
 }

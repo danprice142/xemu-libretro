@@ -76,7 +76,7 @@ typedef struct QEMU_PACKED DiskDumpHeader32 {
     uint32_t total_ram_blocks;      /* Number of blocks should be written */
     uint32_t device_blocks;         /* Number of total blocks in dump device */
     uint32_t written_blocks;        /* Number of written blocks */
-    uint32_t current_cpu;           /* CPU# which handles dump */
+    uint32_t dump_current_cpu;      /* CPU# which handles dump */
     uint32_t nr_cpus;               /* Number of CPUs */
 } DiskDumpHeader32;
 
@@ -94,7 +94,7 @@ typedef struct QEMU_PACKED DiskDumpHeader64 {
     uint32_t total_ram_blocks;      /* Number of blocks should be written */
     uint32_t device_blocks;         /* Number of total blocks in dump device */
     uint32_t written_blocks;        /* Number of written blocks */
-    uint32_t current_cpu;           /* CPU# which handles dump */
+    uint32_t dump_current_cpu;      /* CPU# which handles dump */
     uint32_t nr_cpus;               /* Number of CPUs */
 } DiskDumpHeader64;
 

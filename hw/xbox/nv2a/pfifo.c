@@ -263,7 +263,25 @@ static void pfifo_run_pusher(NV2AState *d)
     if (!GET_MASK(*push0, NV_PFIFO_CACHE1_PUSH0_ACCESS) ||
         !GET_MASK(*dma_push, NV_PFIFO_CACHE1_DMA_PUSH_ACCESS) ||
         GET_MASK(*dma_push, NV_PFIFO_CACHE1_DMA_PUSH_STATUS)) {
+        static int pusher_skip = 0;
+        pusher_skip++;
+        if (0) {
+            fprintf(stderr, "pusher_skip=%d push0_acc=%d dma_push_acc=%d dma_push_status=%d\n",
+                    pusher_skip,
+                    GET_MASK(*push0, NV_PFIFO_CACHE1_PUSH0_ACCESS),
+                    GET_MASK(*dma_push, NV_PFIFO_CACHE1_DMA_PUSH_ACCESS),
+                    GET_MASK(*dma_push, NV_PFIFO_CACHE1_DMA_PUSH_STATUS));
+            fflush(stderr);
+        }
         return;
+    }
+    {
+        static int pusher_run = 0;
+        pusher_run++;
+        if (0) {
+            fprintf(stderr, "pusher_run=%d\n", pusher_run);
+            (void)0;
+        }
     }
 
     // TODO: should we become busy here??
@@ -458,8 +476,11 @@ void *pfifo_thread(void *arg)
     rcu_register_thread();
 
     qemu_mutex_lock(&d->pfifo.lock);
+    d->pfifo.thread_running = true;
     while (true) {
         d->pfifo.fifo_kick = false;
+        if (0) {
+        }
 
         pgraph_process_pending(d);
 

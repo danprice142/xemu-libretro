@@ -103,6 +103,7 @@ typedef struct NV2AState {
         QemuCond fifo_idle_cond;
         bool fifo_kick;
         bool halt;
+        bool thread_running; /* set after PFIFO thread enters main loop */
     } pfifo;
 
     struct {

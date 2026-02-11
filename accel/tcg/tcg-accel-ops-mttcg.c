@@ -80,11 +80,13 @@ static void *mttcg_cpu_thread_fn(void *arg)
 
     cpu->thread_id = qemu_get_thread_id();
     cpu->neg.can_do_io = true;
-    current_cpu = cpu;
+    SET_current_cpu(cpu);
     cpu_thread_signal_created(cpu);
     qemu_guest_random_seed_thread_part2(cpu->random_seed);
-
+    {
+    int mttcg_loop = 0;
     do {
+        mttcg_loop++;
         qemu_process_cpu_events(cpu);
 
         if (cpu_can_run(cpu)) {
@@ -112,6 +114,7 @@ static void *mttcg_cpu_thread_fn(void *arg)
             }
         }
     } while (!cpu->unplug || cpu_can_run(cpu));
+    }
 
     tcg_cpu_destroy(cpu);
     bql_unlock();

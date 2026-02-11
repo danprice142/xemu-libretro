@@ -1046,10 +1046,15 @@ int cpu_exec(CPUState *cpu)
     SyncClocks sc = { 0 };
 
     /* replay_interrupt may need current_cpu */
-    current_cpu = cpu;
+    SET_current_cpu(cpu);
 
     if (cpu_handle_halt(cpu)) {
         return EXCP_HALTED;
+    }
+
+    {
+        if (0) {
+        }
     }
 
     RCU_READ_LOCK_GUARD();

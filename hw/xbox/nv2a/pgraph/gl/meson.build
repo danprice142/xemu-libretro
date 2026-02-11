@@ -1,4 +1,4 @@
-specific_ss.add([sdl, gloffscreen, files(
+specific_ss.add([get_option('libretro') ? [] : sdl, gloffscreen, files(
 	'blit.c',
 	'debug.c',
 	'display.c',

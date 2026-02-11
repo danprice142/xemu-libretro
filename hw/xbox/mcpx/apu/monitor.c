@@ -19,6 +19,109 @@
 
 #include "apu_int.h"
 
+#ifdef LIBRETRO
+
+/*
+ * Libretro audio path: write APU frames directly to a ring buffer
+ * that retro_run pulls from via libretro_audio_pull().
+ */
+#include "qemu/atomic.h"
+#include <stdint.h>
+
+/* Prototype for libretro_audio_pull - called from ui/libretro.c */
+int libretro_audio_pull(int16_t *out_buf, int max_frames);
+
+#define LIBRETRO_APU_RING_FRAMES 16384
+#define LIBRETRO_APU_RING_SAMPLES (LIBRETRO_APU_RING_FRAMES * 2)
+
+static int16_t apu_ring[LIBRETRO_APU_RING_SAMPLES];
+static volatile uint32_t apu_ring_wp = 0;
+static volatile uint32_t apu_ring_rp = 0;
+
+int libretro_audio_ring_frames(void);
+int libretro_audio_ring_frames(void)
+{
+    uint32_t rp = qatomic_read(&apu_ring_rp);
+    uint32_t wp = qatomic_read(&apu_ring_wp);
+    if (wp >= rp) return (wp - rp) / 2;
+    return (LIBRETRO_APU_RING_SAMPLES - rp + wp) / 2;
+}
+
+void libretro_audio_flush(void);
+void libretro_audio_flush(void)
+{
+    /* Discard all buffered audio (e.g. stale boot audio) */
+    qatomic_set(&apu_ring_rp, qatomic_read(&apu_ring_wp));
+}
+
+int libretro_audio_pull(int16_t *out_buf, int max_frames)
+{
+    uint32_t rp = qatomic_read(&apu_ring_rp);
+    uint32_t wp = qatomic_read(&apu_ring_wp);
+    int avail;
+
+    if (wp >= rp) {
+        avail = (wp - rp) / 2;
+    } else {
+        avail = (LIBRETRO_APU_RING_SAMPLES - rp + wp) / 2;
+    }
+    if (avail > max_frames) avail = max_frames;
+
+    for (int i = 0; i < avail; i++) {
+        out_buf[i * 2 + 0] = apu_ring[rp];
+        rp = (rp + 1) % LIBRETRO_APU_RING_SAMPLES;
+        out_buf[i * 2 + 1] = apu_ring[rp];
+        rp = (rp + 1) % LIBRETRO_APU_RING_SAMPLES;
+    }
+    qatomic_set(&apu_ring_rp, rp);
+    return avail;
+}
+
+void mcpx_apu_monitor_init(MCPXAPUState *d, Error **errp)
+{
+    d->monitor.stream = NULL;
+    qatomic_set(&apu_ring_wp, 0);
+    qatomic_set(&apu_ring_rp, 0);
+}
+
+void mcpx_apu_monitor_finalize(MCPXAPUState *d)
+{
+    /* Nothing to clean up for ring buffer */
+}
+
+static int monitor_frame_call_count = 0;
+
+void mcpx_apu_monitor_frame(MCPXAPUState *d)
+{
+    if ((d->ep_frame_div + 1) % 8) {
+        return;
+    }
+
+    monitor_frame_call_count++;
+
+    /* Write frame_buf (256 stereo int16 samples) into ring buffer */
+    uint32_t wp = qatomic_read(&apu_ring_wp);
+    uint32_t wp_before = wp;
+    int16_t (*fb)[2] = d->monitor.frame_buf;
+
+    /* Write raw samples — RetroArch handles volume control.
+     * Consumer-driven throttle in apu.c prevents overflow, but
+     * break on full as a safety net (same as SDL path behavior). */
+    for (int i = 0; i < 256; i++) {
+        uint32_t next = (wp + 2) % LIBRETRO_APU_RING_SAMPLES;
+        if (next == qatomic_read(&apu_ring_rp)) break; /* full */
+
+        apu_ring[wp]     = fb[i][0];
+        apu_ring[wp + 1] = fb[i][1];
+        wp = next;
+    }
+    qatomic_set(&apu_ring_wp, wp);
+
+    memset(d->monitor.frame_buf, 0, sizeof(d->monitor.frame_buf));
+}
+
+#else /* !LIBRETRO */
+
 void mcpx_apu_monitor_init(MCPXAPUState *d, Error **errp)
 {
     SDL_AudioSpec spec = {
@@ -67,3 +170,5 @@ void mcpx_apu_monitor_frame(MCPXAPUState *d)
 
     memset(d->monitor.frame_buf, 0, sizeof(d->monitor.frame_buf));
 }
+
+#endif /* LIBRETRO */

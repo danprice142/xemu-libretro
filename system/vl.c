@@ -2824,14 +2824,6 @@ static bool qemu_machine_creation_done(Error **errp)
     /* Did we create any drives that we failed to create a device for? */
     drive_check_orphaned();
 
-    /* Don't warn about the default network setup that you get if
-     * no command line -net or -netdev options are specified. There
-     * are two cases that we would otherwise complain about:
-     * (1) board doesn't support a NIC but the implicit "-net nic"
-     * requested one
-     * (2) CONFIG_SLIRP not set, in which case the implicit "-net nic"
-     * sets up a nic that isn't connected to anything.
-     */
     if (!default_net && (!qtest_enabled() || has_defaults)) {
         net_check_clients();
     }
@@ -3040,8 +3032,6 @@ void qemu_init(int argc, char **argv)
 
     const char *flashrom_path = g_config.sys.files.flashrom_path;
     if (g_config.general.show_welcome) {
-        // Don't display an error if this is the first boot. Give user a chance
-        // to configure the path.
         autostart = 0;
     } else if (xemu_check_file(flashrom_path)) {
         char *msg = g_strdup_printf("Failed to open flash file '%s'. Please check machine settings.", flashrom_path);
@@ -3094,8 +3084,13 @@ void qemu_init(int argc, char **argv)
         escaped_dvd_path);
     free(escaped_dvd_path);
 
+#ifdef LIBRETRO
+    fake_argv[fake_argc++] = strdup("-display");
+    fake_argv[fake_argc++] = strdup("none");
+#else
     fake_argv[fake_argc++] = strdup("-display");
     fake_argv[fake_argc++] = strdup("xemu");
+#endif
 
     // Create USB Daughterboard for 1.0 Xbox. This is connected to Port 1 of the Root hub.
     fake_argv[fake_argc++] = strdup("-device");
@@ -3117,7 +3112,6 @@ void qemu_init(int argc, char **argv)
     argv = fake_argv;
 
 /*****************************************************************************/
-
 
     qemu_add_opts(&qemu_drive_opts);
     qemu_add_drive_opts(&qemu_legacy_drive_opts);

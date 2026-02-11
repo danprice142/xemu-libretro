@@ -46,8 +46,23 @@ static void defer_call_atexit(Notifier *n, void *value)
     g_array_free(thread_state->deferred_call_array, TRUE);
 }
 
+#if defined(LIBRETRO) && defined(_WIN32)
+static DWORD tls_key_defer_call_atexit_notifier = TLS_OUT_OF_INDEXES;
+static inline Notifier *get_defer_call_atexit_notifier(void) {
+    if (tls_key_defer_call_atexit_notifier == TLS_OUT_OF_INDEXES)
+        tls_key_defer_call_atexit_notifier = TlsAlloc();
+    Notifier *p = (Notifier *)TlsGetValue(tls_key_defer_call_atexit_notifier);
+    if (!p) {
+        p = g_malloc0(sizeof(Notifier));
+        TlsSetValue(tls_key_defer_call_atexit_notifier, p);
+    }
+    return p;
+}
+#define defer_call_atexit_notifier (*get_defer_call_atexit_notifier())
+#else
 /* This won't involve coroutines, so use __thread */
 static __thread Notifier defer_call_atexit_notifier;
+#endif
 
 /**
  * defer_call:

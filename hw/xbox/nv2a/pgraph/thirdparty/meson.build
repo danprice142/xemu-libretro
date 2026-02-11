@@ -11,8 +11,15 @@ nv2a_vsh_cpu = declare_dependency(include_directories: nv2a_vsh_cpu_subproj.incl
                                     nv2a_vsh_cpu_subproj.target('nv2a_vsh_disassembler'),
                                     ])
 
-libgloffscreen = static_library('libgloffscreen',
-                          sources: files('gloffscreen/common.c', 'gloffscreen/sdl.c'),
-                          dependencies: sdl)
+if get_option('libretro')
+  libgloffscreen = static_library('libgloffscreen',
+                            sources: files('gloffscreen/common.c', 'gloffscreen/gloffscreen_libretro.c'),
+                            c_args: ['-DLIBRETRO=1'],
+                            dependencies: [])
+else
+  libgloffscreen = static_library('libgloffscreen',
+                            sources: files('gloffscreen/common.c', 'gloffscreen/sdl.c'),
+                            dependencies: sdl)
+endif
 gloffscreen = declare_dependency(link_with: libgloffscreen,
                            include_directories: ['gloffscreen'])

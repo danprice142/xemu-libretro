@@ -248,7 +248,11 @@ bool tcg_use_softmmu;
 #endif
 
 TCGContext tcg_init_ctx;
+#if defined(LIBRETRO) && defined(_WIN32)
+unsigned long tls_key_tcg_ctx = 0xFFFFFFFF; /* TLS_OUT_OF_INDEXES */
+#else
 __thread TCGContext *tcg_ctx;
+#endif
 
 TCGContext **tcg_ctxs;
 unsigned int tcg_cur_ctxs;
@@ -1286,7 +1290,7 @@ static const TCGOutOp * const all_outop[NB_OPS] = {
 #ifdef CONFIG_USER_ONLY
 void tcg_register_thread(void)
 {
-    tcg_ctx = &tcg_init_ctx;
+    SET_tcg_ctx(&tcg_init_ctx);
 }
 #else
 
@@ -1300,7 +1304,7 @@ void tcg_register_init_ctx(void)
      * data stored in TLS which get initialized early on and may be required
      * later.
      */
-    tcg_ctx = &tcg_init_ctx;
+    SET_tcg_ctx(&tcg_init_ctx);
 }
 #endif
 
@@ -1329,7 +1333,7 @@ void tcg_register_thread(void)
         tcg_region_initial_alloc(s);
     }
 
-    tcg_ctx = s;
+    SET_tcg_ctx(s);
 }
 #endif /* !CONFIG_USER_ONLY */
 
@@ -1853,7 +1857,7 @@ static void tcg_context_init(unsigned max_threads)
         indirect_reg_alloc_order[i] = tcg_target_reg_alloc_order[i];
     }
 
-    tcg_ctx = s;
+    SET_tcg_ctx(s);
     /*
      * In user-mode we simply share the init context among threads, since we
      * use a single region. See the documentation tcg_region_init() for the

@@ -1318,6 +1318,14 @@ void pgraph_gl_surface_update(NV2AState *d, bool upload, bool color_write,
 {
     PGRAPHState *pg = &d->pgraph;
     PGRAPHGLState *r = pg->gl_renderer_state;
+    static int su_call = 0;
+    su_call++;
+    if (su_call <= 20 || (su_call % 1000) == 0) {
+        int num_surf = 0;
+        SurfaceBinding *si;
+        QTAILQ_FOREACH(si, &r->surfaces, entry) { num_surf++; }
+        (void)num_surf;
+    }
 
     pg->surface_shape.z_format =
         GET_MASK(pgraph_reg_r(pg, NV_PGRAPH_SETUPRASTER),

@@ -5,6 +5,10 @@ system_ss.add(files(
   'wavaudio.c',
 ))
 
+if get_option('libretro')
+  system_ss.add(files('libretroadio.c'))
+endif
+
 # deprecated since v10.2, to be removed
 system_ss.add(files('audio-hmp-cmds.c', 'wavcapture.c'))
 

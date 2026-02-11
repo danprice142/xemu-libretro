@@ -357,16 +357,34 @@ void pgraph_destroy(PGRAPHState *pg)
 int nv2a_get_framebuffer_surface(void)
 {
     NV2AState *d = g_nv2a;
+    if (!d) {
+        return 0;
+    }
     PGRAPHState *pg = &d->pgraph;
     int s = 0;
 
     qemu_mutex_lock(&pg->renderer_lock);
     assert(!pg->framebuffer_in_use);
     pg->framebuffer_in_use = true;
-    if (pg->renderer->ops.get_framebuffer_surface) {
+#ifdef LIBRETRO
+    /*
+     * Release renderer_lock before calling get_framebuffer_surface.
+     * The PFIFO thread needs renderer_lock to wait on framebuffer_released
+     * during sync processing. Holding it here while the VK renderer's
+     * get_framebuffer_surface waits on sync_complete causes a deadlock.
+     * framebuffer_in_use=true already prevents renderer teardown.
+     */
+    const PGRAPHRenderer *renderer = pg->renderer;
+    qemu_mutex_unlock(&pg->renderer_lock);
+    if (renderer && renderer->ops.get_framebuffer_surface) {
+        s = renderer->ops.get_framebuffer_surface(d);
+    }
+#else
+    if (pg->renderer && pg->renderer->ops.get_framebuffer_surface) {
         s = pg->renderer->ops.get_framebuffer_surface(d);
     }
     qemu_mutex_unlock(&pg->renderer_lock);
+#endif
 
     return s;
 }
@@ -380,6 +398,26 @@ void nv2a_release_framebuffer_surface(void)
     qemu_cond_broadcast(&pg->framebuffer_released);
     qemu_mutex_unlock(&pg->renderer_lock);
 }
+
+#ifdef LIBRETRO
+void nv2a_trigger_display_render(void)
+{
+    NV2AState *d = g_nv2a;
+    if (!d) return;
+    PGRAPHState *pg = &d->pgraph;
+
+    qemu_mutex_lock(&d->pfifo.lock);
+
+    /* Only trigger if not already pending */
+    if (!qatomic_read(&pg->sync_pending)) {
+        qemu_event_reset(&pg->sync_complete);
+        qatomic_set(&pg->sync_pending, true);
+        pfifo_kick(d);
+    }
+
+    qemu_mutex_unlock(&d->pfifo.lock);
+}
+#endif
 
 void nv2a_set_surface_scale_factor(unsigned int scale)
 {

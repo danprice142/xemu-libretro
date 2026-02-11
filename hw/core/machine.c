@@ -1786,22 +1786,9 @@ void qdev_machine_creation_done(void)
         qemu_register_reset(restore_boot_order, g_strdup(current_machine->boot_config.order));
     }
 
-    /*
-     * ok, initial machine setup is done, starting from now we can
-     * only create hotpluggable devices
-     */
     phase_advance(PHASE_MACHINE_READY);
     qdev_assert_realized_properly();
 
-    /* TODO: once all bus devices are qdevified, this should be done
-     * when bus is created by qdev.c */
-    /*
-     * This is where we arrange for the sysbus to be reset when the
-     * whole simulation is reset. In turn, resetting the sysbus will cause
-     * all devices hanging off it (and all their child buses, recursively)
-     * to be reset. Note that this will *not* reset any Device objects
-     * which are not attached to some part of the qbus tree!
-     */
     qemu_register_resettable(OBJECT(sysbus_get_default()));
 
     notifier_list_notify(&machine_init_done_notifiers, NULL);
@@ -1817,10 +1804,6 @@ void qdev_machine_creation_done(void)
     }
 
     replay_start();
-
-    /* This checkpoint is required by replay to separate prior clock
-       reading from the other reads, because timer polling functions query
-       clock values from the log. */
     replay_checkpoint(CHECKPOINT_RESET);
     qemu_system_reset(SHUTDOWN_CAUSE_NONE);
     register_global_state();

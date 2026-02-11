@@ -436,6 +436,11 @@ ShutdownCause qemu_reset_requested_get(void)
     return reset_requested;
 }
 
+ShutdownCause qemu_reset_requested_consume(void)
+{
+    return qatomic_xchg(&reset_requested, SHUTDOWN_CAUSE_NONE);
+}
+
 static int qemu_shutdown_requested(void)
 {
     return qatomic_xchg(&shutdown_requested, SHUTDOWN_CAUSE_NONE);

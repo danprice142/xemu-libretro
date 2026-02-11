@@ -41,8 +41,32 @@ typedef struct RCUCloseFILE {
 static QemuMutex global_mutex;
 static char *global_filename;
 static FILE *global_file;
+#if defined(LIBRETRO) && defined(_WIN32)
+static DWORD tls_key_thread_file = TLS_OUT_OF_INDEXES;
+static DWORD tls_key_qemu_log_thread_cleanup_notifier = TLS_OUT_OF_INDEXES;
+static inline void log_tls_init(void) {
+    if (tls_key_thread_file == TLS_OUT_OF_INDEXES) {
+        tls_key_thread_file = TlsAlloc();
+        tls_key_qemu_log_thread_cleanup_notifier = TlsAlloc();
+    }
+}
+#define thread_file ((FILE *)(log_tls_init(), TlsGetValue(tls_key_thread_file)))
+#define SET_thread_file(v) (log_tls_init(), TlsSetValue(tls_key_thread_file, (LPVOID)(v)))
+static inline Notifier *get_qemu_log_thread_cleanup_notifier_ptr(void) {
+    log_tls_init();
+    Notifier *p = (Notifier *)TlsGetValue(tls_key_qemu_log_thread_cleanup_notifier);
+    if (!p) {
+        p = g_malloc0(sizeof(Notifier));
+        TlsSetValue(tls_key_qemu_log_thread_cleanup_notifier, p);
+    }
+    return p;
+}
+#define qemu_log_thread_cleanup_notifier (*get_qemu_log_thread_cleanup_notifier_ptr())
+#else
 static __thread FILE *thread_file;
+#define SET_thread_file(v) do { thread_file = (v); } while(0)
 static __thread Notifier qemu_log_thread_cleanup_notifier;
+#endif
 
 unsigned qemu_loglevel;
 static bool log_per_thread;
@@ -81,7 +105,7 @@ static void qemu_log_thread_cleanup(Notifier *n, void *unused)
 {
     if (thread_file != stderr) {
         fclose(thread_file);
-        thread_file = NULL;
+        SET_thread_file(NULL);
     }
 }
 
@@ -103,7 +127,7 @@ static FILE *qemu_log_trylock_with_err(Error **errp)
                                  filename, log_thread_id());
                 return NULL;
             }
-            thread_file = logfile;
+            SET_thread_file(logfile);
             qemu_log_thread_cleanup_notifier.notify = qemu_log_thread_cleanup;
             qemu_thread_atexit_add(&qemu_log_thread_cleanup_notifier);
         } else {
@@ -359,7 +383,7 @@ static bool qemu_set_log_internal(const char *filename, bool changed_name,
         }
 
         if (log_per_thread && daemonized) {
-            thread_file = logfile;
+            SET_thread_file(logfile);
         } else {
             qatomic_rcu_set(&global_file, logfile);
         }

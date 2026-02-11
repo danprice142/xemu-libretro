@@ -46,12 +46,21 @@ foreach speed : ['quick', 'thorough']
 
     if dir.endswith('-softmmu')
       sysmode = 'system'
+      if 'qemu-system-' + target_base not in emulators
+        continue
+      endif
       test_emulator = emulators['qemu-system-' + target_base]
     elif dir.endswith('-linux-user')
       sysmode = 'linuxuser'
+      if 'qemu-' + target_base not in emulators
+        continue
+      endif
       test_emulator = emulators['qemu-' + target_base]
     elif dir.endswith('-bsd-user')
       sysmode = 'bsduser'
+      if 'qemu-' + target_base not in emulators
+        continue
+      endif
       test_emulator = emulators['qemu-' + target_base]
     else
       continue

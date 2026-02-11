@@ -104,8 +104,23 @@ typedef struct QSPSnapshot QSPSnapshot;
 /* this file's full path. Used to present all call sites with relative paths */
 static size_t qsp_qemu_path_len;
 
+#if defined(LIBRETRO) && defined(_WIN32)
+static DWORD tls_key_qsp_thread = TLS_OUT_OF_INDEXES;
+static inline int *get_qsp_thread_ptr(void) {
+    if (tls_key_qsp_thread == TLS_OUT_OF_INDEXES)
+        tls_key_qsp_thread = TlsAlloc();
+    int *p = (int *)TlsGetValue(tls_key_qsp_thread);
+    if (!p) {
+        p = g_malloc0(sizeof(int));
+        TlsSetValue(tls_key_qsp_thread, p);
+    }
+    return p;
+}
+#define qsp_thread (*get_qsp_thread_ptr())
+#else
 /* the address of qsp_thread gives us a unique 'thread ID' */
 static __thread int qsp_thread;
+#endif
 
 /*
  * Call sites are the same for all threads, so we track them in a separate hash

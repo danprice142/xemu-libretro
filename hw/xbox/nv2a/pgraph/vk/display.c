@@ -221,7 +221,9 @@ static const char *display_frag_glsl =
     "    vec2 tex_coord = gl_FragCoord.xy/display_size;\n"
     "    float rel = display_size.y/textureSize(tex, 0).y/line_offset;\n"
     "    tex_coord.y = 1 + rel*(tex_coord.y - 1);\n"
+#ifndef LIBRETRO
     "    tex_coord.y = 1 - tex_coord.y;\n" // GL compat
+#endif
     "    out_Color.rgba = texture(tex, tex_coord);\n"
     "    if (pvideo_enable) {\n"
     "        vec2 screen_coord = vec2(gl_FragCoord.x, display_size.y - gl_FragCoord.y) * pvideo_scale.z;\n"
@@ -586,9 +588,12 @@ static void create_display_image(PGRAPHState *pg, int width, int height)
     glGetInternalformativ(GL_TEXTURE_2D, gl_internal_format,
                           GL_NUM_TILING_TYPES_EXT, 1, &num_tiling_types);
     // XXX: Apparently on AMD GL_OPTIMAL_TILING_EXT is reported to be
-    // supported, but doesn't work? On nVidia, GL_LINEAR_TILING_EXT may not
-    // be supported so we must use optimal. Default to optimal unless
-    // linear is explicitly specified...
+    // supported but glTexStorageMem2DEXT fails with GL_INVALID_OPERATION.
+    // Use linear tiling on AMD as a workaround.
+    const char *gl_vendor = (const char*)glGetString(GL_VENDOR);
+    if (gl_vendor && strstr(gl_vendor, "AMD")) {
+        use_optimal_tiling = false;
+    }
     GLint tiling_types[num_tiling_types];
     glGetInternalformativ(GL_TEXTURE_2D, gl_internal_format,
                           GL_TILING_TYPES_EXT, num_tiling_types, tiling_types);
@@ -603,6 +608,7 @@ static void create_display_image(PGRAPHState *pg, int width, int height)
     // Create image
     VkImageCreateInfo image_create_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT,
         .imageType = VK_IMAGE_TYPE_2D,
         .extent.width = width,
         .extent.height = height,
@@ -612,7 +618,7 @@ static void create_display_image(PGRAPHState *pg, int width, int height)
         .format = VK_FORMAT_R8G8B8A8_UNORM,
         .tiling = use_optimal_tiling ? VK_IMAGE_TILING_OPTIMAL : VK_IMAGE_TILING_LINEAR,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
@@ -682,7 +688,8 @@ static void create_display_image(PGRAPHState *pg, int width, int height)
 
     glCreateMemoryObjectsEXT(1, &d->gl_memory_obj);
     glImportMemoryWin32HandleEXT(d->gl_memory_obj, memory_requirements.size, GL_HANDLE_TYPE_OPAQUE_WIN32_EXT, d->handle);
-    assert(glGetError() == GL_NO_ERROR);
+    GLenum err = glGetError();
+    assert(err == GL_NO_ERROR);
 
 #else
 
@@ -710,8 +717,10 @@ static void create_display_image(PGRAPHState *pg, int width, int height)
                                          GL_LINEAR_TILING_EXT);
     glTexStorageMem2DEXT(GL_TEXTURE_2D, 1, gl_internal_format,
                          image_create_info.extent.width,
-                         image_create_info.extent.height, d->gl_memory_obj, 0);
-    assert(glGetError() == GL_NO_ERROR);
+                         image_create_info.extent.height,
+                         d->gl_memory_obj, 0);
+    GLenum tex_err = glGetError();
+    assert(tex_err == GL_NO_ERROR);
 
 #endif // HAVE_EXTERNAL_MEMORY
 
