@@ -202,7 +202,7 @@ static void *rr_cpu_thread_fn(void *arg)
 
         /* process any pending work */
         CPU_FOREACH(cpu) {
-            current_cpu = cpu;
+            SET_current_cpu(cpu);
             qemu_process_cpu_events_common(cpu);
         }
     }
@@ -270,7 +270,7 @@ static void *rr_cpu_thread_fn(void *arg)
             if (qatomic_load_acquire(&cpu->exit_request)) {
                 break;
             }
-            current_cpu = cpu;
+            SET_current_cpu(cpu);
 
             qemu_clock_enable(QEMU_CLOCK_VIRTUAL,
                               (cpu->singlestep_enabled & SSTEP_NOTIMER) == 0);

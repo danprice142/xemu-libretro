@@ -115,12 +115,30 @@
  *
  *   __thread int my_count;
  */
+#if defined(LIBRETRO) && defined(_WIN32)
+#define QEMU_DEFINE_CO_TLS(type, var)                                        \
+    static DWORD co_tls_key_##var = TLS_OUT_OF_INDEXES;                      \
+    static inline void co_tls_init_##var(void) {                             \
+        if (co_tls_key_##var == TLS_OUT_OF_INDEXES)                          \
+            co_tls_key_##var = TlsAlloc();                                   \
+    }                                                                        \
+    static inline type *co_tls_getptr_##var(void) {                          \
+        co_tls_init_##var();                                                 \
+        type *p = (type *)TlsGetValue(co_tls_key_##var);                     \
+        if (!p) { p = g_malloc0(sizeof(type)); TlsSetValue(co_tls_key_##var, p); } \
+        return p;                                                            \
+    }                                                                        \
+    type get_##var(void) { return *co_tls_getptr_##var(); }                  \
+    void set_##var(type v) { *co_tls_getptr_##var() = v; }                   \
+    type *get_ptr_##var(void) { return co_tls_getptr_##var(); }
+#else
 #define QEMU_DEFINE_CO_TLS(type, var)                                        \
     static __thread type co_tls_##var;                                       \
     type get_##var(void) { asm volatile(""); return co_tls_##var; }          \
     void set_##var(type v) { asm volatile(""); co_tls_##var = v; }           \
     type *get_ptr_##var(void)                                                \
     { type *ptr = &co_tls_##var; asm volatile("" : "+rm" (ptr)); return ptr; }
+#endif
 
 /**
  * QEMU_DEFINE_STATIC_CO_TLS:
@@ -150,6 +168,26 @@
  *   my_count = c + 1;
  *   *(&my_count) = 0;
  */
+#if defined(LIBRETRO) && defined(_WIN32)
+#define QEMU_DEFINE_STATIC_CO_TLS(type, var)                                 \
+    static DWORD co_tls_key_s_##var = TLS_OUT_OF_INDEXES;                    \
+    static inline void co_tls_init_s_##var(void) {                           \
+        if (co_tls_key_s_##var == TLS_OUT_OF_INDEXES)                        \
+            co_tls_key_s_##var = TlsAlloc();                                 \
+    }                                                                        \
+    static inline type *co_tls_getptr_s_##var(void) {                        \
+        co_tls_init_s_##var();                                               \
+        type *p = (type *)TlsGetValue(co_tls_key_s_##var);                   \
+        if (!p) { p = (type *)g_malloc0(sizeof(type)); TlsSetValue(co_tls_key_s_##var, p); } \
+        return p;                                                            \
+    }                                                                        \
+    static __attribute__((unused))                                           \
+    type get_##var(void) { return *co_tls_getptr_s_##var(); }                \
+    static __attribute__((unused))                                           \
+    void set_##var(type v) { *co_tls_getptr_s_##var() = v; }                 \
+    static __attribute__((unused))                                           \
+    type *get_ptr_##var(void) { return co_tls_getptr_s_##var(); }
+#else
 #define QEMU_DEFINE_STATIC_CO_TLS(type, var)                                 \
     static __thread type co_tls_##var;                                       \
     static __attribute__((noinline, unused))                                 \
@@ -161,5 +199,6 @@
     static __attribute__((noinline, unused))                                 \
     type *get_ptr_##var(void)                                                \
     { type *ptr = &co_tls_##var; asm volatile("" : "+rm" (ptr)); return ptr; }
+#endif
 
 #endif /* QEMU_COROUTINE_TLS_H */

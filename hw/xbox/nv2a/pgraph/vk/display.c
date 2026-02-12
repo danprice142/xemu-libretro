@@ -221,7 +221,9 @@ static const char *display_frag_glsl =
     "    vec2 tex_coord = gl_FragCoord.xy/display_size;\n"
     "    float rel = display_size.y/textureSize(tex, 0).y/line_offset;\n"
     "    tex_coord.y = 1 + rel*(tex_coord.y - 1);\n"
+#ifndef LIBRETRO
     "    tex_coord.y = 1 - tex_coord.y;\n" // GL compat
+#endif
     "    out_Color.rgba = texture(tex, tex_coord);\n"
     "    if (pvideo_enable) {\n"
     "        vec2 screen_coord = vec2(gl_FragCoord.x, display_size.y - gl_FragCoord.y) * pvideo_scale.z;\n"
@@ -603,6 +605,11 @@ static void create_display_image(PGRAPHState *pg, int width, int height)
     // Create image
     VkImageCreateInfo image_create_info = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+#ifdef LIBRETRO
+        .flags = VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT,
+#else
+        .flags = 0,
+#endif
         .imageType = VK_IMAGE_TYPE_2D,
         .extent.width = width,
         .extent.height = height,
@@ -612,7 +619,7 @@ static void create_display_image(PGRAPHState *pg, int width, int height)
         .format = VK_FORMAT_R8G8B8A8_UNORM,
         .tiling = use_optimal_tiling ? VK_IMAGE_TILING_OPTIMAL : VK_IMAGE_TILING_LINEAR,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };

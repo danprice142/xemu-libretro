@@ -479,7 +479,22 @@ extern bool tcg_use_softmmu;
 #define tcg_use_softmmu  true
 #endif
 
+#if defined(LIBRETRO) && defined(_WIN32)
+extern unsigned long tls_key_tcg_ctx;
+void *__stdcall TlsGetValue(unsigned long);
+int __stdcall TlsSetValue(unsigned long, void *);
+static inline TCGContext *tcg_ctx_get(void) {
+    return (TCGContext *)TlsGetValue(tls_key_tcg_ctx);
+}
+static inline void tcg_ctx_set(TCGContext *v) {
+    TlsSetValue(tls_key_tcg_ctx, (void *)v);
+}
+#define tcg_ctx (tcg_ctx_get())
+#define SET_tcg_ctx(v) tcg_ctx_set(v)
+#else
 extern __thread TCGContext *tcg_ctx;
+#define SET_tcg_ctx(v) do { tcg_ctx = (v); } while(0)
+#endif
 extern const void *tcg_code_gen_epilogue;
 extern uintptr_t tcg_splitwx_diff;
 extern TCGv_env tcg_env;

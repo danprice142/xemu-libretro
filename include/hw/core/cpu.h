@@ -642,7 +642,22 @@ extern CPUTailQ cpus_queue;
 #define CPU_FOREACH_SAFE(cpu, next_cpu) \
     QTAILQ_FOREACH_SAFE_RCU(cpu, &cpus_queue, node, next_cpu)
 
+#if defined(LIBRETRO) && defined(_WIN32)
+extern unsigned long tls_key_current_cpu;
+void *__stdcall TlsGetValue(unsigned long);
+int __stdcall TlsSetValue(unsigned long, void *);
+static inline CPUState *current_cpu_get(void) {
+    return (CPUState *)TlsGetValue(tls_key_current_cpu);
+}
+static inline void current_cpu_set(CPUState *v) {
+    TlsSetValue(tls_key_current_cpu, (void *)v);
+}
+#define current_cpu (current_cpu_get())
+#define SET_current_cpu(v) current_cpu_set(v)
+#else
 extern __thread CPUState *current_cpu;
+#define SET_current_cpu(v) do { current_cpu = (v); } while(0)
+#endif
 
 /**
  * cpu_paging_enabled:

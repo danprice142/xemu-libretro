@@ -22,8 +22,10 @@
 #include "renderer.h"
 #include "xemu-version.h"
 
+#ifndef LIBRETRO
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
+#endif
 
 #include <volk.h>
 
@@ -96,6 +98,7 @@ static bool check_validation_layer_support(void)
     return true;
 }
 
+#ifndef LIBRETRO
 static void create_window(PGRAPHVkState *r, Error **errp)
 {
     r->window = SDL_CreateWindow(
@@ -114,6 +117,17 @@ static void destroy_window(PGRAPHVkState *r)
         r->window = NULL;
     }
 }
+#else
+static void create_window(PGRAPHVkState *r, Error **errp)
+{
+    r->window = NULL;
+}
+
+static void destroy_window(PGRAPHVkState *r)
+{
+    r->window = NULL;
+}
+#endif
 
 static VkExtensionPropertiesArray *
 get_available_instance_extensions(PGRAPHState *pg)
@@ -150,6 +164,7 @@ is_extension_available(VkExtensionPropertiesArray *available_extensions,
 
 static StringArray *get_required_instance_extension_names(PGRAPHState *pg)
 {
+#ifndef LIBRETRO
     // Add instance extensions SDL lists as required
     Uint32 sdl_extension_count = 0;
     const char *const *sdl_extensions =
@@ -162,6 +177,11 @@ static StringArray *get_required_instance_extension_names(PGRAPHState *pg)
     if (sdl_extension_count && sdl_extensions) {
         g_array_append_vals(extensions, sdl_extensions, sdl_extension_count);
     }
+#else
+    StringArray *extensions = g_array_sized_new(
+        FALSE, FALSE, sizeof(char *),
+        ARRAY_SIZE(required_instance_extensions));
+#endif
 
     // Add additional required extensions
     g_array_append_vals(extensions, required_instance_extensions,

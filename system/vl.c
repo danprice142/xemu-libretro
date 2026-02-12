@@ -3094,8 +3094,13 @@ void qemu_init(int argc, char **argv)
         escaped_dvd_path);
     free(escaped_dvd_path);
 
+#ifdef LIBRETRO
+    fake_argv[fake_argc++] = strdup("-display");
+    fake_argv[fake_argc++] = strdup("none");
+#else
     fake_argv[fake_argc++] = strdup("-display");
     fake_argv[fake_argc++] = strdup("xemu");
+#endif
 
     // Create USB Daughterboard for 1.0 Xbox. This is connected to Port 1 of the Root hub.
     fake_argv[fake_argc++] = strdup("-device");

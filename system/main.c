@@ -22,7 +22,7 @@
  * THE SOFTWARE.
  */
 
-#ifndef XBOX
+#if !defined(XBOX) && !defined(LIBRETRO)
 
 #include "qemu/osdep.h"
 #include "qemu-main.h"

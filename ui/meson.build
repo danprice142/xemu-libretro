@@ -19,41 +19,55 @@ system_ss.add(files(
 
 subdir('thirdparty')
 
-xemu_ss = ss.source_set()
-xemu_ss.add(files(
-  'xemu-input.c',
-  'xemu-monitor.c',
-  'xemu-net.c',
-  'xemu-settings.cc',
-  'xemu-controllers.cc',
+if get_option('libretro')
+  # Libretro core build: no SDL UI, no imgui, no xemu UI code
+  xemu_ss = ss.source_set()
+  xemu_ss.add(files(
+    'libretro.c',
+    'libretro-settings-stub.c',
+    'libretro-stubs.c',
+    'xemu-net.c',
+    'xemu-widescreen.c',
+  ))
+  xemu_ss.add(opengl, genconfig)
+  system_ss.add_all(xemu_ss)
+else
+  xemu_ss = ss.source_set()
+  xemu_ss.add(files(
+    'xemu-input.c',
+    'xemu-monitor.c',
+    'xemu-net.c',
+    'xemu-settings.cc',
+    'xemu-controllers.cc',
 
-  'xemu.c',
-  'xemu-data.c',
-  'xemu-snapshots.c',
-  'xemu-thumbnail.cc',
-  'xemu-widescreen.c',
-))
+    'xemu.c',
+    'xemu-data.c',
+    'xemu-snapshots.c',
+    'xemu-thumbnail.cc',
+    'xemu-widescreen.c',
+  ))
 
-if host_os == 'windows'
-  xemu_ss.add(nvapi)
+  if host_os == 'windows'
+    xemu_ss.add(nvapi)
+  endif
+
+  subdir('xui')
+
+  if host_os == 'darwin'
+    xemu_cocoa = dependency('appleframeworks', modules: 'Cocoa')
+    xemu_ss.add(xemu_cocoa)
+  endif
+
+  if host_os == 'linux'
+    xemu_ss.add([gtk, files('xemu-os-utils-linux.c')])
+  elif host_os == 'windows'
+    xemu_ss.add(files('xemu-os-utils-windows.c'))
+  elif host_os == 'darwin'
+    xemu_ss.add(files('xemu-os-utils-macos.m'))
+  endif
+  xemu_ss.add(imgui, implot, stb_image, sdl, opengl, fa, fpng, json, fatx, tomlplusplus, genconfig)
+  system_ss.add_all(xemu_ss)
 endif
-
-subdir('xui')
-
-if host_os == 'darwin'
-  xemu_cocoa = dependency('appleframeworks', modules: 'Cocoa')
-  xemu_ss.add(xemu_cocoa)
-endif
-
-if host_os == 'linux'
-  xemu_ss.add([gtk, files('xemu-os-utils-linux.c')])
-elif host_os == 'windows'
-  xemu_ss.add(files('xemu-os-utils-windows.c'))
-elif host_os == 'darwin'
-  xemu_ss.add(files('xemu-os-utils-macos.m'))
-endif
-xemu_ss.add(imgui, implot, stb_image, sdl, opengl, fa, fpng, json, fatx, tomlplusplus, genconfig)
-system_ss.add_all(xemu_ss)
 
 system_ss.add(when: pixman, if_true: files('console-vc.c'), if_false: files('console-vc-stubs.c'))
 if dbus_display

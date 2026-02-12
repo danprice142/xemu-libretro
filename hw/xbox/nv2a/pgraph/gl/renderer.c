@@ -36,9 +36,11 @@ static void early_context_init(void)
     // context is created so the temporary context will not become the thread
     // context. After destroying the context, some a durable context should be
     // selected.
+#ifndef LIBRETRO
     GloContext *context = glo_context_create();
     pgraph_gl_determine_gpu_properties();
     glo_context_destroy(context);
+#endif
     glo_set_current(g_nv2a_context_display);
 }
 
@@ -50,6 +52,10 @@ static void pgraph_gl_init(NV2AState *d, Error **errp)
     PGRAPHGLState *r = pg->gl_renderer_state;
 
     /* fire up opengl */
+#ifdef LIBRETRO
+    extern void libretro_gl_wait_for_contexts(void);
+    libretro_gl_wait_for_contexts();
+#endif
     glo_set_current(g_nv2a_context_render);
 
 #if DEBUG_NV2A_GL
@@ -57,9 +63,13 @@ static void pgraph_gl_init(NV2AState *d, Error **errp)
 #endif
 
     /* DXT textures */
-    assert(glo_check_extension("GL_EXT_texture_compression_s3tc"));
+    if (!glo_check_extension("GL_EXT_texture_compression_s3tc")) {
+        fprintf(stderr, "Warning: GL_EXT_texture_compression_s3tc not available\n");
+    }
     /*  Internal RGB565 texture format */
-    assert(glo_check_extension("GL_ARB_ES2_compatibility"));
+    if (!glo_check_extension("GL_ARB_ES2_compatibility")) {
+        fprintf(stderr, "Warning: GL_ARB_ES2_compatibility not available\n");
+    }
 
     glGetFloatv(GL_SMOOTH_LINE_WIDTH_RANGE, r->supported_smooth_line_width_range);
     glGetFloatv(GL_ALIASED_LINE_WIDTH_RANGE, r->supported_aliased_line_width_range);

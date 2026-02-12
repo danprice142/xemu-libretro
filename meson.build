@@ -183,7 +183,8 @@ endforeach
 # xemu Version
 ###########################################
 
-xemu_version_cmd = [find_program('scripts/xemu-version.sh'),
+xemu_version_cmd = [find_program('python3', 'python'),
+                    files('scripts/xemu-version.py'),
                     meson.current_source_dir()]
 xemu_version = custom_target('xemu-version-macro.h',
                              output: 'xemu-version-macro.h',
@@ -789,6 +790,17 @@ endif
 qemu_cxxflags = []
 if 'cpp' in all_languages
   qemu_cxxflags = ['-D__STDC_LIMIT_MACROS', '-D__STDC_CONSTANT_MACROS', '-D__STDC_FORMAT_MACROS'] + qemu_cflags
+endif
+
+if get_option('libretro')
+  libretro_static_defs = ['-DLIBRETRO=1', '-DCURL_STATICLIB', '-DLIBSLIRP_STATIC',
+                          '-DEPOXY_PUBLIC=extern', '-DGLIB_STATIC_COMPILATION',
+                          '-DGIO_STATIC_COMPILATION', '-DGMODULE_STATIC_COMPILATION',
+                          '-DGOBJECT_STATIC_COMPILATION']
+  qemu_cflags += libretro_static_defs
+  if 'cpp' in all_languages
+    qemu_cxxflags += libretro_static_defs
+  endif
 endif
 
 add_project_arguments(qemu_cflags, native: false, language: 'c')
@@ -2362,7 +2374,22 @@ elif host_os == 'linux'
 endif
 
 if vulkan.found()
-  libglslang = dependency('glslang', version: '>=15.0.0', required: false)
+  if get_option('libretro')
+    # For libretro: use static glslang + SPIRV-Tools libraries to avoid shared DLL deps
+    libglslang = declare_dependency(
+      dependencies: [
+        cc.find_library('glslang', static: true),
+        cc.find_library('MachineIndependent', static: true),
+        cc.find_library('GenericCodeGen', static: true),
+        cc.find_library('SPIRV', static: true),
+        cc.find_library('glslang-default-resource-limits', static: true),
+        cc.find_library('SPIRV-Tools', static: true),
+        cc.find_library('SPIRV-Tools-opt', static: true),
+      ]
+    )
+  else
+    libglslang = dependency('glslang', version: '>=15.0.0', required: false)
+  endif
   if not libglslang.found()
     # FIXME: Get spirv-tools to enable opt.
     glslang_opts = cmake.subproject_options()
@@ -4435,6 +4462,9 @@ foreach target : target_dirs
   c_args = ['-DCOMPILING_PER_TARGET',
             '-DCONFIG_TARGET="@0@-config-target.h"'.format(target),
   ]
+  if get_option('libretro')
+    c_args += ['-DLIBRETRO=1']
+  endif
   link_args = emulator_link_args
 
   target_inc = [include_directories('target' / config_target['TARGET_BASE_ARCH'])]
@@ -4583,6 +4613,26 @@ foreach target : target_dirs
                  build_by_default: false)
 
   if target.endswith('-softmmu')
+    if get_option('libretro')
+      # Build as shared library for libretro
+      execs = []
+      libretro_link_args = link_args
+      if host_os == 'windows'
+        libretro_link_args += ['-liphlpapi', '-static', '-static-libgcc', '-static-libstdc++']
+      endif
+      xemu_libretro = shared_library('xemu_libretro',
+        files('system/main.c'),
+        install: true,
+        c_args: c_args + libretro_static_defs,
+        dependencies: arch_deps,
+        objects: lib.extract_all_objects(recursive: true),
+        link_depends: [block_syms, qemu_syms],
+        link_args: libretro_link_args,
+        name_prefix: '',
+        name_suffix: 'dll',
+      )
+      emulators += {'xemu_libretro': xemu_libretro}
+    else
     execs = [{
       'name': 'qemu-system-' + target_name,
       'win_subsystem': 'console',
@@ -4596,6 +4646,7 @@ foreach target : target_dirs
         'sources': files('system/main.c'),
         'dependencies': [sdl]
       }]
+    endif
     endif
     if get_option('fuzzing')
       specific_fuzz = specific_fuzz_ss.apply(config_target, strict: false)

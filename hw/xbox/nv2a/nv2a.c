@@ -193,6 +193,14 @@ int nv2a_get_screen_off(void)
     return g_nv2a->vga.sr[VGA_SEQ_CLOCK_MODE] & VGA_SR01_SCREEN_OFF;
 }
 
+QemuConsole *nv2a_get_vga_console(void)
+{
+    if (g_nv2a) {
+        return g_nv2a->vga.con;
+    }
+    return NULL;
+}
+
 static void nv2a_vga_gfx_update(void *opaque)
 {
     VGACommonState *vga = opaque;
@@ -281,20 +289,28 @@ static void nv2a_unlock_fifo(NV2AState *d)
 
 static void nv2a_reset(NV2AState *d)
 {
-    nv2a_lock_fifo(d);
-    bool halted = qatomic_read(&d->pfifo.halt);
-    if (!halted) {
-        qatomic_set(&d->pfifo.halt, true);
-    }
-    qemu_event_reset(&d->pgraph.flush_complete);
-    qatomic_set(&d->pgraph.flush_pending, true);
-    nv2a_unlock_fifo(d);
-    bql_unlock();
-    qemu_event_wait(&d->pgraph.flush_complete);
-    bql_lock();
-    nv2a_lock_fifo(d);
-    if (!halted) {
-        qatomic_set(&d->pfifo.halt, false);
+    /* Skip FIFO lock if PFIFO thread hasn't entered its main loop yet */
+    bool have_renderer = d->pfifo.thread_running;
+
+    if (have_renderer) {
+        nv2a_lock_fifo(d);
+        bool halted = qatomic_read(&d->pfifo.halt);
+        if (!halted) {
+            qatomic_set(&d->pfifo.halt, true);
+        }
+
+        qemu_event_reset(&d->pgraph.flush_complete);
+        qatomic_set(&d->pgraph.flush_pending, true);
+        qemu_cond_broadcast(&d->pfifo.fifo_cond);
+        nv2a_unlock_fifo(d);
+        bql_unlock();
+        qemu_event_wait(&d->pgraph.flush_complete);
+        bql_lock();
+        nv2a_lock_fifo(d);
+
+        if (!halted) {
+            qatomic_set(&d->pfifo.halt, false);
+        }
     }
 
     memset(d->pfifo.regs, 0, sizeof(d->pfifo.regs));
@@ -328,7 +344,10 @@ static void nv2a_reset(NV2AState *d)
         d->puserdac.palette[i*3+2] = i;
     }
 
-    nv2a_unlock_fifo(d);
+    if (have_renderer) {
+        nv2a_unlock_fifo(d);
+    }
+
 }
 
 static void nv2a_realize(PCIDevice *dev, Error **errp)

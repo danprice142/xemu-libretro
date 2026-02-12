@@ -110,6 +110,27 @@ static void throttle(MCPXAPUState *d)
 
     const int64_t ep_frame_us = 5333; /* 256/48000 sec (~5.33ms) */
     int64_t start_us = qemu_clock_get_us(QEMU_CLOCK_REALTIME);
+
+#ifdef LIBRETRO
+    /* Time-based pacing at 48kHz with round-up */
+    {
+        if (d->next_frame_time_us == 0 ||
+            start_us - d->next_frame_time_us > 2 * ep_frame_us) {
+            d->next_frame_time_us = start_us;
+        }
+        while (!d->pause_requested) {
+            int64_t now_us = qemu_clock_get_us(QEMU_CLOCK_REALTIME);
+            int64_t remaining_us = d->next_frame_time_us - now_us;
+            if (remaining_us > 0) {
+                int64_t sleep_ms = (remaining_us + 999) / 1000;
+                qemu_cond_timedwait(&d->cond, &d->lock, sleep_ms);
+            } else {
+                break;
+            }
+        }
+        d->next_frame_time_us += ep_frame_us;
+    }
+#else
     int queued = -1;
 
     if (d->monitor.stream) {
@@ -140,6 +161,7 @@ static void throttle(MCPXAPUState *d)
         }
         d->next_frame_time_us += ep_frame_us;
     }
+#endif
 
     d->sleep_acc_us += qemu_clock_get_us(QEMU_CLOCK_REALTIME) - start_us;
 }

@@ -28,7 +28,7 @@ static void *dummy_cpu_thread_fn(void *arg)
     bql_lock();
     qemu_thread_get_self(cpu->thread);
     cpu->thread_id = qemu_get_thread_id();
-    current_cpu = cpu;
+    SET_current_cpu(cpu);
 
 #ifndef _WIN32
     sigset_t waitset;

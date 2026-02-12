@@ -107,6 +107,10 @@ static void pgraph_vk_flush(NV2AState *d)
 static void pgraph_vk_sync(NV2AState *d)
 {
     PGRAPHState *pg = &d->pgraph;
+#if HAVE_EXTERNAL_MEMORY
+    /* Ensure PFIFO thread's GL context is current for GL interop in render_display */
+    glo_set_current(g_gl_context);
+#endif
     pgraph_vk_render_display(pg);
 
     qatomic_set(&d->pgraph.sync_pending, false);
@@ -174,6 +178,10 @@ static int pgraph_vk_get_framebuffer_surface(NV2AState *d)
     PGRAPHState *pg = &d->pgraph;
     PGRAPHVkState *r = pg->vk_renderer_state;
 
+    if (!r || !r->device) {
+        return 0;
+    }
+
     qemu_mutex_lock(&d->pfifo.lock);
 
     VGADisplayParams vga_display_params;
@@ -203,6 +211,34 @@ static int pgraph_vk_get_framebuffer_surface(NV2AState *d)
     return 0;
 #endif
 }
+
+#ifdef LIBRETRO
+void nv2a_get_vk_display_info(void **out_handle, int *out_width, int *out_height)
+{
+    NV2AState *d = g_nv2a;
+    if (!d) {
+        *out_handle = NULL;
+        *out_width = 0;
+        *out_height = 0;
+        return;
+    }
+    PGRAPHState *pg = &d->pgraph;
+    PGRAPHVkState *r = pg->vk_renderer_state;
+    if (!r) {
+        *out_handle = NULL;
+        *out_width = 0;
+        *out_height = 0;
+        return;
+    }
+#ifdef WIN32
+    *out_handle = (void*)r->display.handle;
+#else
+    *out_handle = NULL;
+#endif
+    *out_width = r->display.width;
+    *out_height = r->display.height;
+}
+#endif
 
 static PGRAPHRenderer pgraph_vk_renderer = {
     .type = CONFIG_DISPLAY_RENDERER_VULKAN,

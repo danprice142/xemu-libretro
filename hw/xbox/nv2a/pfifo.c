@@ -458,6 +458,7 @@ void *pfifo_thread(void *arg)
     rcu_register_thread();
 
     qemu_mutex_lock(&d->pfifo.lock);
+    d->pfifo.thread_running = true;
     while (true) {
         d->pfifo.fifo_kick = false;
 

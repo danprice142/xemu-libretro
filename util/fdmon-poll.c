@@ -21,17 +21,63 @@
  * any lock, the arrays cannot be stored in AioContext.  Thread-local data
  * has none of the disadvantages of these three options.
  */
+#if defined(LIBRETRO) && defined(_WIN32)
+static DWORD tls_key_pollfds = TLS_OUT_OF_INDEXES;
+static DWORD tls_key_nodes = TLS_OUT_OF_INDEXES;
+static DWORD tls_key_npfd = TLS_OUT_OF_INDEXES;
+static DWORD tls_key_nalloc = TLS_OUT_OF_INDEXES;
+static DWORD tls_key_pollfds_cleanup_notifier = TLS_OUT_OF_INDEXES;
+
+static inline void fdmon_tls_init(void) {
+    if (tls_key_pollfds == TLS_OUT_OF_INDEXES) {
+        tls_key_pollfds = TlsAlloc();
+        tls_key_nodes = TlsAlloc();
+        tls_key_npfd = TlsAlloc();
+        tls_key_nalloc = TlsAlloc();
+        tls_key_pollfds_cleanup_notifier = TlsAlloc();
+    }
+}
+
+#define pollfds      ((GPollFD *)(fdmon_tls_init(), TlsGetValue(tls_key_pollfds)))
+#define nodes        ((AioHandler **)(fdmon_tls_init(), TlsGetValue(tls_key_nodes)))
+#define npfd         ((unsigned)(uintptr_t)(fdmon_tls_init(), TlsGetValue(tls_key_npfd)))
+#define nalloc       ((unsigned)(uintptr_t)(fdmon_tls_init(), TlsGetValue(tls_key_nalloc)))
+
+static inline Notifier *get_pollfds_cleanup_notifier_ptr(void) {
+    fdmon_tls_init();
+    Notifier *p = (Notifier *)TlsGetValue(tls_key_pollfds_cleanup_notifier);
+    if (!p) {
+        p = g_malloc0(sizeof(Notifier));
+        TlsSetValue(tls_key_pollfds_cleanup_notifier, p);
+    }
+    return p;
+}
+#define pollfds_cleanup_notifier (*get_pollfds_cleanup_notifier_ptr())
+
+/* Helper macros to set TLS values */
+#define SET_pollfds(v)  TlsSetValue(tls_key_pollfds, (LPVOID)(v))
+#define SET_nodes(v)    TlsSetValue(tls_key_nodes, (LPVOID)(v))
+#define SET_npfd(v)     TlsSetValue(tls_key_npfd, (LPVOID)(uintptr_t)(v))
+#define SET_nalloc(v)   TlsSetValue(tls_key_nalloc, (LPVOID)(uintptr_t)(v))
+#else
 static __thread GPollFD *pollfds;
 static __thread AioHandler **nodes;
 static __thread unsigned npfd, nalloc;
 static __thread Notifier pollfds_cleanup_notifier;
+#define SET_pollfds(v)  do { pollfds = (v); } while(0)
+#define SET_nodes(v)    do { nodes = (v); } while(0)
+#define SET_npfd(v)     do { npfd = (v); } while(0)
+#define SET_nalloc(v)   do { nalloc = (v); } while(0)
+#endif
 
 static void pollfds_cleanup(Notifier *n, void *unused)
 {
     g_assert(npfd == 0);
     g_free(pollfds);
     g_free(nodes);
-    nalloc = 0;
+    SET_pollfds(NULL);
+    SET_nodes(NULL);
+    SET_nalloc(0);
 }
 
 static void add_pollfd(AioHandler *node)
@@ -40,20 +86,20 @@ static void add_pollfd(AioHandler *node)
         if (nalloc == 0) {
             pollfds_cleanup_notifier.notify = pollfds_cleanup;
             qemu_thread_atexit_add(&pollfds_cleanup_notifier);
-            nalloc = 8;
+            SET_nalloc(8);
         } else {
             g_assert(nalloc <= INT_MAX);
-            nalloc *= 2;
+            SET_nalloc(nalloc * 2);
         }
-        pollfds = g_renew(GPollFD, pollfds, nalloc);
-        nodes = g_renew(AioHandler *, nodes, nalloc);
+        SET_pollfds(g_renew(GPollFD, pollfds, nalloc));
+        SET_nodes(g_renew(AioHandler *, nodes, nalloc));
     }
     nodes[npfd] = node;
     pollfds[npfd] = (GPollFD) {
         .fd = node->pfd.fd,
         .events = node->pfd.events,
     };
-    npfd++;
+    SET_npfd(npfd + 1);
 }
 
 static int fdmon_poll_wait(AioContext *ctx, AioHandlerList *ready_list,
@@ -77,7 +123,7 @@ static int fdmon_poll_wait(AioContext *ctx, AioHandlerList *ready_list,
                 g_source_remove_poll(&ctx->source, &node->pfd);
             }
         }
-        npfd = 0; /* we won't need pollfds[], reset npfd */
+        SET_npfd(0); /* we won't need pollfds[], reset npfd */
         return ctx->fdmon_ops->wait(ctx, ready_list, timeout);
     }
 
@@ -94,7 +140,7 @@ static int fdmon_poll_wait(AioContext *ctx, AioHandlerList *ready_list,
         }
     }
 
-    npfd = 0;
+    SET_npfd(0);
     return ret;
 }
 
